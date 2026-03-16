@@ -134,11 +134,7 @@
         var prompt = getFullPrompt();
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(prompt).then(function () {
-            var original = copyBtn.innerText;
             copyBtn.innerText = t.copied;
-            setTimeout(function () {
-              copyBtn.innerText = original;
-            }, 2000);
           });
         } else {
           var ta = document.createElement("textarea");
@@ -150,11 +146,7 @@
           ta.select();
           try {
             document.execCommand("copy");
-            var original = copyBtn.innerText;
             copyBtn.innerText = t.copied;
-            setTimeout(function () {
-              copyBtn.innerText = original;
-            }, 2000);
           } catch (e) {}
           document.body.removeChild(ta);
         }
