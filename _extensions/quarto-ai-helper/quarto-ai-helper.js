@@ -9,13 +9,16 @@
       askChatGPT: "🤖 问问 ChatGPT",
       copyPrompt: "📋 复制提问到其它大模型",
       copied: "✅ 已复制到剪贴板",
+      errorLabel: "⚠️ 代码运行出错",
+      chatTooltip: "将源代码和报错信息发送给 ChatGPT，获取修复建议",
+      copyTooltip: "复制格式化的提问内容到剪贴板，方便粘贴到其它大模型",
       promptTemplate: function (source, error, language) {
         return "我在 Quarto 文档中运行 " + language + " 代码时遇到了报错，请帮我分析原因并修复代码。\n\n" +
           "## 源代码\n\n" +
           "```" + language.toLowerCase() + "\n" + source + "\n```\n\n" +
           "## 报错信息\n\n" +
           "```\n" + error + "\n```\n\n" +
-          "请用 Markdown 格式回答，直接给出修复后的代码及原因简述。";
+          "请用 Markdown 格式回答，解释原因并给出修复后的代码。";
       },
       noSource: "（无法获取源代码）"
     },
@@ -23,6 +26,9 @@
       askChatGPT: "🤖 Ask ChatGPT",
       copyPrompt: "📋 Copy prompt for other AI",
       copied: "✅ Copied to clipboard",
+      errorLabel: "⚠️ Code Error",
+      chatTooltip: "Send the source code and error message to ChatGPT for a fix",
+      copyTooltip: "Copy a formatted prompt to clipboard for use with other AI models",
       promptTemplate: function (source, error, language) {
         return "I encountered an error while running " + language + " code in a Quarto document. " +
           "Please help me diagnose the issue and fix the code.\n\n" +
@@ -30,7 +36,7 @@
           "```" + language.toLowerCase() + "\n" + source + "\n```\n\n" +
           "## Error Message\n\n" +
           "```\n" + error + "\n```\n\n" +
-          "Please respond in Markdown format with the fixed code and a brief explanation.";
+          "Please respond in Markdown format with a brief explanation and the fixed code.";
       },
       noSource: "(Source code not available)"
     }
@@ -38,34 +44,88 @@
 
   var t = isChinese ? i18n.zh : i18n.en;
 
+  // ── 注入 CSS 样式 ──────────────────────────────────────────────────────
+  var css = [
+    "/* quarto-ai-helper styles */",
+    ".cell-output-error.ai-helper-styled {",
+    "  border-left: 4px solid #dc3545;",
+    "  background: linear-gradient(135deg, #fff5f5 0%, #ffe8e8 100%);",
+    "  border-radius: 8px;",
+    "  padding: 16px 18px;",
+    "  margin-top: 10px;",
+    "  position: relative;",
+    "  box-shadow: 0 2px 8px rgba(220, 53, 69, 0.12);",
+    "}",
+    ".cell-output-error.ai-helper-styled pre {",
+    "  background: transparent;",
+    "  border: none;",
+    "  margin: 0;",
+    "  padding: 0;",
+    "  color: #721c24;",
+    "  font-size: 0.9em;",
+    "}",
+    ".cell-output-error.ai-helper-styled code {",
+    "  background: transparent;",
+    "  color: #721c24;",
+    "}",
+    ".ai-helper-error-label {",
+    "  display: inline-block;",
+    "  font-weight: 700;",
+    "  font-size: 0.85em;",
+    "  color: #dc3545;",
+    "  margin-bottom: 8px;",
+    "  letter-spacing: 0.3px;",
+    "}",
+    ".quarto-ai-helper-buttons {",
+    "  margin-top: 12px;",
+    "  padding-top: 10px;",
+    "  border-top: 1px dashed #e0c8c8;",
+    "  display: flex;",
+    "  gap: 10px;",
+    "  align-items: center;",
+    "  flex-wrap: wrap;",
+    "}",
+    ".quarto-ai-helper-buttons .btn-success {",
+    "  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);",
+    "  border: none;",
+    "  font-weight: 600;",
+    "  padding: 6px 16px;",
+    "  border-radius: 20px;",
+    "  box-shadow: 0 2px 6px rgba(40, 167, 69, 0.3);",
+    "  transition: all 0.2s ease;",
+    "  cursor: pointer;",
+    "}",
+    ".quarto-ai-helper-buttons .btn-success:hover {",
+    "  transform: translateY(-1px);",
+    "  box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);",
+    "}",
+    ".quarto-ai-helper-buttons .btn-outline-secondary {",
+    "  border-radius: 20px;",
+    "  padding: 6px 16px;",
+    "  transition: all 0.2s ease;",
+    "  cursor: pointer;",
+    "}",
+    ".quarto-ai-helper-buttons .btn-outline-secondary:hover {",
+    "  transform: translateY(-1px);",
+    "}"
+  ].join("\n");
+
+  var styleEl = document.createElement("style");
+  styleEl.textContent = css;
+  document.head.appendChild(styleEl);
+
   // ── 辅助函数：检测代码语言 ─────────────────────────────────────────────
   function detectLanguage(sourceCodeBlock) {
     if (!sourceCodeBlock) return "R";
-    // Quarto 生成的 <pre class="sourceCode r"> 或 <pre class="sourceCode python">
     var classList = sourceCodeBlock.className || "";
     if (classList.indexOf("python") !== -1) return "Python";
     if (classList.indexOf("julia") !== -1) return "Julia";
     if (classList.indexOf("bash") !== -1) return "Bash";
     if (classList.indexOf("js") !== -1 || classList.indexOf("javascript") !== -1) return "JavaScript";
-    return "R"; // 默认 R
+    return "R";
   }
 
-  // ── 辅助函数：获取纯错误文本（排除按钮容器）────────────────────────────
-  function getErrorText(block) {
-    var text = "";
-    var children = block.childNodes;
-    for (var i = 0; i < children.length; i++) {
-      var node = children[i];
-      // 跳过按钮容器
-      if (node.nodeType === 1 && node.classList && node.classList.contains("quarto-ai-helper-buttons")) {
-        continue;
-      }
-      text += (node.textContent || "");
-    }
-    return text.trim();
-  }
-
-  // ── 辅助函数：获取完整的源代码（包括代码块中的所有 <pre> 内容）──────────
+  // ── 辅助函数：获取完整的源代码 ────────────────────────────────────────
   function getSourceCode(parentCell) {
     if (!parentCell) return null;
     var codeBlocks = parentCell.querySelectorAll("pre.sourceCode");
@@ -84,7 +144,7 @@
 
     errorBlocks.forEach(function (block) {
       // 避免重复添加
-      if (block.querySelector(".quarto-ai-helper-buttons")) return;
+      if (block.classList.contains("ai-helper-styled")) return;
 
       // 找到所属 cell
       var parentCell = block.closest(".cell");
@@ -97,26 +157,33 @@
       // 检测编程语言
       var language = detectLanguage(firstSourceBlock);
 
-      // 先保存原始错误文本（在添加按钮之前）
+      // 先保存原始错误文本（在修改 DOM 之前）
       var originalErrorText = block.innerText.trim();
+
+      // ── 给错误块添加样式类 ────────────────────────────────────────────
+      block.classList.add("ai-helper-styled");
+
+      // ── 在错误信息顶部添加标签 ────────────────────────────────────────
+      var label = document.createElement("div");
+      label.className = "ai-helper-error-label";
+      label.textContent = t.errorLabel;
+      block.insertBefore(label, block.firstChild);
 
       // 构造发送给大模型的完整 prompt
       var getFullPrompt = function () {
         var sourceCode = getSourceCode(parentCell) || t.noSource;
-        var errorMessage = originalErrorText;
-        return t.promptTemplate(sourceCode, errorMessage, language);
+        return t.promptTemplate(sourceCode, originalErrorText, language);
       };
 
-      // ── 容器（放在 block 外部，作为兄弟元素）──────────────────────────
+      // ── 按钮容器（放在错误块内部底部）─────────────────────────────────
       var container = document.createElement("div");
       container.className = "quarto-ai-helper-buttons";
-      container.style.cssText =
-        "margin-top: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;";
 
       // ── ChatGPT 按钮 ─────────────────────────────────────────────────────
       var chatBtn = document.createElement("button");
       chatBtn.innerText = t.askChatGPT;
       chatBtn.className = "btn btn-success btn-sm";
+      chatBtn.title = t.chatTooltip;
       chatBtn.onclick = function () {
         var prompt = getFullPrompt();
         if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -132,6 +199,7 @@
       var copyBtn = document.createElement("button");
       copyBtn.innerText = t.copyPrompt;
       copyBtn.className = "btn btn-outline-secondary btn-sm";
+      copyBtn.title = t.copyTooltip;
       copyBtn.onclick = function () {
         var prompt = getFullPrompt();
         if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -143,7 +211,6 @@
             }, 2000);
           });
         } else {
-          // 降级方案：使用 execCommand
           var ta = document.createElement("textarea");
           ta.value = prompt;
           ta.style.position = "fixed";
@@ -166,8 +233,8 @@
       container.appendChild(chatBtn);
       container.appendChild(copyBtn);
 
-      // 将按钮容器插入到 error block 的后面（作为兄弟节点），而非内部
-      block.parentNode.insertBefore(container, block.nextSibling);
+      // 按钮放在错误块内部底部
+      block.appendChild(container);
     });
   }
 
@@ -175,7 +242,6 @@
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", initAIHelper);
   } else {
-    // DOM 已经加载完成（脚本在 body 末尾时常见此情况）
     initAIHelper();
   }
 })();
