@@ -1,6 +1,28 @@
+-- quarto-ai-helper.lua
+-- Inject the AI helper JavaScript into HTML output.
+-- The JS automatically detects error output blocks and adds "Ask AI" buttons.
 
--- Reformat all heading text 
-function Header(el)
-  el.content = pandoc.Emph(el.content)
-  return el
+local function readFile(path)
+  local file = io.open(path, "r")
+  if not file then return nil end
+  local content = file:read("*a")
+  file:close()
+  return content
+end
+
+function Meta(meta)
+  -- Only inject for HTML format
+  if not quarto.doc.is_format("html") then
+    return meta
+  end
+
+  -- Read the JS file from the same directory as this Lua filter
+  local scriptPath = quarto.utils.resolve_path("quarto-ai-helper.js")
+  local jsContent = readFile(scriptPath)
+
+  if jsContent then
+    quarto.doc.include_text("after-body", "<script>\n" .. jsContent .. "\n</script>")
+  end
+
+  return meta
 end
