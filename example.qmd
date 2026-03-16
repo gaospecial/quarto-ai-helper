@@ -1,0 +1,13 @@
+---
+title: "Quarto AI Helper Test"
+filters:
+  - quarto-ai-helper
+---
+
+## 故意制造一个错误
+
+```{r}
+#| error: true
+# 运行这段代码将看到 AI 辅助按钮
+10 / "a"
+```
